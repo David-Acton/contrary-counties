@@ -1,0 +1,301 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+library(rJava)      # Needed for tabulizer
+library(tidyverse)  # Core data manipulation and visualization libraries
+
+if (!require("remotes")) {
+    install.packages("remotes")
+}
+# on 64-bit Windows
+remotes::install_github(c("ropensci/tabulizerjars", "ropensci/tabulizer"), INSTALL_opts = "--no-multiarch")
+
+library(tabulizer)  # Handy tool for PDF Scraping
+```
+
+```{r}
+pdf_path <- "Referendum-Results-1937-2019.pdf"
+
+```
+
+```{r}
+
+referendums <- extract_tables(
+  pdf_path,
+  pages = c(37, 41, 43, 45, 47, 49, 51, 53, 55, 59, 61, 65, 67, 69, 71, 73, 77, 79, 81, 83, 85, 87, 89, 91, 93, 95, 97, 99), #Normal Referendums
+  output = "data.frame",
+  )
+
+```
+
+
+```{r}
+
+edited_referendums <- list()
+
+for (x in referendums) {
+  
+  x <- x[-(1:4),]
+  
+  colnames(x) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+  
+  rownames(x) <- 1:nrow(x)
+  
+  x <- x %>% filter(row_number() <= n()-1)
+  
+  x$`Electorate` <- as.numeric(gsub(",","",x$`Electorate`))
+  x$`Total Poll` <- as.numeric(gsub(",","",x$`Total Poll`))
+  x$`Votes in favour of proposal` <- as.numeric(gsub(",","",x$`Votes in favour of proposal`))
+  x$`Votes against proposal` <- as.numeric(gsub(",","",x$`Votes against proposal`))
+  x$`Spoilt votes` <- as.numeric(gsub(",|([**])","",x$`Spoilt votes`)) #Regular Expression
+  
+  edited_referendums <- append(edited_referendums, list(x))
+  }
+
+edited_referendums
+
+```
+
+
+```{r}
+
+altered_pages = c(21, 23, 25, 33, 35, 39, 63, 75, 27, 29, 31) # On these pages, there contains a separation in the table.
+
+#altered_coords_top = list(c(176.8, 45.2, 257.0, 544.3), c(181, 69, 281, 527), c(206.5, 70.5, 298.6, 525.0), c(186, 69, 279, 527), c(192, 69, 255, 524), c(205.0, 70.5, 264.4, 520.6), c(189, 69, 260, 524), c(153.0, 70.5, 729.4, 526.5), c(170.8, 70.5, 234.7, 520.6), c(166.4, 64.5, 239.2, 528.0))
+
+#altered_coords_bottom = list(c(285.2, 43.7, 724.9, 553.2), c(302, 69, 743, 524), c(322, 69, 740, 524), c(301.5, 67.5, 714.5, 526.5), c(289.7, 70.5, 723.4, 523.5), c(292.6, 70.5, 680.3, 525.0), c(287, 69, 717, 527), NULL, c(258.5, 67.5, 671.4, 523.5), c(262.9, 67.5, 690.7, 525.0))
+
+  split_referendums <- extract_tables(
+  pdf_path,
+  pages = altered_pages, #Normal Referendums
+  output = "data.frame",
+  )
+
+```
+
+```{r}
+
+edited_split_referendums <- list()
+
+for (x in split_referendums) {
+  
+  x <- x[-(1:5),]
+  
+  colnames(x) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+  
+  
+  x <- x %>% filter(row_number() <= n()-1)
+
+  
+  x$`Electorate` <- as.numeric(gsub(",","",x$`Electorate`))
+  x$`Total Poll` <- as.numeric(gsub(",","",x$`Total Poll`))
+  x$`Votes in favour of proposal` <- as.numeric(gsub(",","",x$`Votes in favour of proposal`))
+  x$`Votes against proposal` <- as.numeric(gsub(",","",x$`Votes against proposal`))
+  x$`Spoilt votes` <- as.numeric(gsub(",|([**])","",x$`Spoilt votes`)) #Regular Expression
+  
+  x <- x[complete.cases(x), ]
+  
+  rownames(x) <- 1:nrow(x)
+  
+  blank_rows <- x$Constituency == ""
+  row_index <- which(blank_rows)
+  x$Constituency[row_index] <- "Dun Laoghaire and Rathdown"
+  
+  edited_split_referendums <- append(edited_split_referendums, list(x))
+  
+  }
+
+edited_split_referendums
+
+```
+
+
+```{r}
+
+edited_stray_referendums <- list()
+
+# Scrape page 101 from the document.
+data_101 <- extract_tables(pdf_path, pages = 101, output = "data.frame")[[1]]
+
+# Rearrange the data frame
+data_101 <- data_101[5:(nrow(data_101) - 1),]
+data_101 <- data_101[,-2] # required to remove extra columns
+rownames(data_101) <- 1:nrow(data_101)
+colnames(data_101) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+
+# Fix data types.
+data_101$`Electorate` <- as.numeric(gsub(",","",data_101$`Electorate`))
+data_101$`Total Poll` <- as.numeric(gsub(",","",data_101$`Total Poll`))
+data_101$`Votes in favour of proposal` <- as.numeric(gsub(",","",data_101$`Votes in favour of proposal`))
+data_101$`Votes against proposal` <- as.numeric(gsub(",","",data_101$`Votes against proposal`))
+data_101$`Spoilt votes` <- as.numeric(gsub(",|([**])","",data_101$`Spoilt votes`))
+
+# Add the fixed data frame to a list.
+edited_stray_referendums <- append(edited_stray_referendums, list(data_101))
+
+data_101
+
+
+```
+```{r}
+
+# Scrape page 57 from the document.
+data_57 <- extract_tables(pdf_path, pages = 57, guess = FALSE, area = list(c(153.0, 70.5, 729.4, 526.5)), output = "data.frame")[[1]]
+
+# Initially rearrange the data frame
+data_57 <- data_57[1:(nrow(data_57) - 1),]
+
+# Fix the top data frame first.
+top_row = gsub("X", "", colnames(data_57))
+top_row = c(gsub("\\.", "-", top_row[1]), gsub("\\.", ",", top_row[2]), gsub("\\.", ",", top_row[3]), top_row[4], gsub("\\.", ",", top_row[5]), gsub("\\.", ",", top_row[6]), gsub("\\.", ",", top_row[7]))
+data_57 <- rbind(top_row, data_57)
+
+# Rearrange the top data frame
+rownames(data_57) <- 1:nrow(data_57)
+colnames(data_57) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+
+# Fix data types.
+data_57$`Electorate` <- as.numeric(gsub(",","",data_57$`Electorate`))
+data_57$`Total Poll` <- as.numeric(gsub(",","",data_57$`Total Poll`))
+data_57$`Votes in favour of proposal` <- as.numeric(gsub(",","",data_57$`Votes in favour of proposal`))
+data_57$`Votes against proposal` <- as.numeric(gsub(",","",data_57$`Votes against proposal`))
+data_57$`Spoilt votes` <- as.numeric(gsub(",|([**])","",data_57$`Spoilt votes`))
+
+# Add the fixed data frame to a list.
+edited_stray_referendums <- append(edited_stray_referendums, list(data_57))
+
+data_57
+
+```
+
+```{r}
+
+# Scrape the top table.
+top_scrape_19 <- extract_tables(
+file   = pdf_path, 
+pages = 19,
+area = list(c(176.8,45.2,257.0,544.3)),
+guess = FALSE,
+output = "data.frame")
+
+# Get the data frame from the object
+data_top_19 <- top_scrape_19[[1]]
+
+# Fix the top data frame first.
+top_row = gsub("X", "", colnames(data_top_19))
+top_row = c(gsub("\\.", "-", top_row[1]), gsub("\\.", ",", top_row[2]), gsub("\\.", ",", top_row[3]), top_row[4], gsub("\\.", ",", top_row[5]), gsub("\\.", ",", top_row[6]), gsub("\\.", ",", top_row[7]))
+data_top_19 <- rbind(top_row, data_top_19)
+
+# Rearrange the top data frame
+rownames(data_top_19) <- 1:nrow(data_top_19)
+colnames(data_top_19) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+
+# Scrape the bottom table.
+bottom_scrape_19 <- extract_tables(
+  file   = pdf_path, 
+  pages = 19,
+  area = list(c(285.2, 43.7, 724.9, 553.2)),
+  guess = FALSE,
+  output = "data.frame")
+
+# Get the data frame from the object
+data_bottom_19 <- bottom_scrape_19[[1]]
+
+# Fix the bottom data frame next.
+bottom_row = gsub("X", "", colnames(data_bottom_19))
+bottom_row = c(gsub("\\.", "-", bottom_row[1]), gsub("\\.", ",", bottom_row[2]), gsub("\\.", ",", bottom_row[3]), bottom_row[4], gsub("\\.", ",", bottom_row[5]), gsub("\\.", ",", bottom_row[6]), gsub("\\.", ",", bottom_row[7]))
+data_bottom_19 <- rbind(bottom_row, data_bottom_19)
+data_bottom_19 <- data_bottom_19[1:nrow(data_bottom_19) - 1,] # remove the total section
+
+# Rearrange the bottom data frame
+rownames(data_bottom_19) <- 1:nrow(data_bottom_19)
+colnames(data_bottom_19) <- c("Constituency", "Electorate", "Total Poll", "Percentage Poll", "Votes in favour of proposal", "Votes against proposal", "Spoilt votes")
+
+# Merge both data frames
+data_19 <- rbind(data_top_19, data_bottom_19[,names(data_top_19)])
+
+# Fix data types.
+data_19$`Electorate` <- as.numeric(gsub(",","",data_19$`Electorate`))
+data_19$`Total Poll` <- as.numeric(gsub(",","",data_19$`Total Poll`))
+data_19$`Votes in favour of proposal` <- as.numeric(gsub(",","",data_19$`Votes in favour of proposal`))
+data_19$`Votes against proposal` <- as.numeric(gsub(",","",data_19$`Votes against proposal`))
+data_19$`Spoilt votes` <- as.numeric(gsub(",|([**])","",data_19$`Spoilt votes`))
+
+# Add the fixed data frame to a list.
+edited_stray_referendums <- append(edited_stray_referendums, list(data_19))
+
+data_19
+
+```
+
+
+```{r}
+
+total_referendums <- list()
+
+total_referendums <- append(total_referendums, edited_referendums)
+total_referendums <- append(total_referendums, edited_split_referendums)
+total_referendums <- append(total_referendums, edited_stray_referendums)
+total_referendums
+
+```
+```{r}
+
+contrary_counties <- c()
+
+
+
+for (y in total_referendums) {
+  total_votes = (y$`Votes in favour of proposal` + y$`Votes against proposal`)
+  
+  if (sum(y$`Votes in favour of proposal`) >= sum(y$`Votes against proposal`)) {
+    
+    print("Referendum Passed")
+    no_percent = (y$`Votes against proposal`) / total_votes
+    print(max(no_percent))
+    index = which.max(no_percent)
+    con = y$Constituency[index]
+    print(con)
+    
+  } else {
+    print("Referendum Failed")
+    yes_percent = (y$`Votes in favour of proposal`) / total_votes
+    print(max(yes_percent))
+    index = which.max(yes_percent)
+    con = y$Constituency[index]
+    print(con)
+  }
+  
+contrary_counties <- append(contrary_counties, con)
+
+}
+
+
+table(contrary_counties)
+
+
+```
+```{r}
+
+# Get the frequency of each constituency.
+freq_table <- table(contrary_counties)
+freq_frame <- as.data.frame(freq_table)
+
+# Plot the bar chart.
+ggplot(as.data.frame(freq_frame), aes(x=contrary_counties, y = Freq)) + 
+    geom_bar(stat="identity") + scale_x_discrete(guide = guide_axis(n.dodge = 1, angle = 90))
+
+
+```
+
+
+
+
+
+
+
